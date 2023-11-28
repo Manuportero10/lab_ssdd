@@ -40,8 +40,6 @@ def test_caso2() -> None: // el test SI lo ejecutará
 
 Tambíen he creado el script coverage.sh para saber la cobertura del código, al ejecutar este comando, la cobertura se quedará almacenada en una carpeta llamada htmlcov, donde se habrá generado automaticamente una página donde puedes mirar la cobertura de código. En el archivo index.html teneis el índice para buscar los archivos .py que quieras ver la cobertura.
 
-Si quieres ver la cobertura de un caso de uso completo, donde el test de prueba, el supuesto cliente ha llamado a todas las funciones de la interfaz propuesta, correspondería con la funcion ```test_caso2()``` del archivo ```test_blob.py```, se quedará almacenado en la carpeta **cobertura_caso2**.
-
 **NOTA**: para poder usar estos scripts os teneis que situar en la carpeta icedrive_blob.
 
 <br>
