@@ -86,6 +86,7 @@ class BlobService(IceDrive.BlobService):
             with open(self.ruta_diccionario_path_id, "w") as file:         
                 file.writelines(lineas_diccionario)
 
+    # ¿Puedes hacer lo mismo con paths id changed?
     def update_dictionary_links_id_changed(self, diccionario_id_nlinks : dict, current: Ice.Current = None) -> None:
         """Updates the diccionary with a changed blobid, but remaining its old number of links which is stored in Sistema_directorios/tmp/historial_blob."""
         with open(self.ruta_diccionario_id_nlinks, "w") as file:
@@ -128,34 +129,20 @@ class BlobService(IceDrive.BlobService):
                 file.write(key + " " + value + "\n")
 
     
-    # estos 2 metodos pueden ser uno solo. -----------------------------------------------------
-    def recover_dictionary_links(self, current: Ice.Current = None) -> dict:
-        """Recovers the diccionary which is stored in Sistema_directorio/tmp/historial_blob.txt"""
-        diccionario_id_nlinks = {}  
-
-        with open(self.ruta_diccionario_id_nlinks, "r") as file: 
+    def recover_dictionary(self, ruta : str, current: Ice.Current = None) -> dict:
+        '''Recovers the dictionary from the file provided.'''
+        diccionario = {}  
+        with open(ruta, "r") as file: 
             for line in file:
                 line = line.split()
-                diccionario_id_nlinks[line[0]] = line[1] 
+                diccionario[line[0]] = line[1] 
 
-        return diccionario_id_nlinks
-
-    def recover_dictionary_paths(self, current: Ice.Current = None) -> dict:
-        """Recovers the diccionary which is stored in Sistema_directorio/tmp/historial_rutas.txt"""
-        diccionario_path_id = {}
-
-        with open(self.ruta_diccionario_path_id, "r") as file:    
-            for line in file:
-                line = line.split()
-                diccionario_path_id[line[0]] = line[1] 
-        
-        return diccionario_path_id
-    
+        return diccionario
 
     def link(self, blob_id: str, current: Ice.Current = None) -> None:
         """Mark a blob_id file as linked in some directory."""
         
-        diccionario_id_nlinks = self.recover_dictionary_links() # necesitamos que el diccionario sea persistente entre ejecuciones
+        diccionario_id_nlinks = self.recover_dictionary(self.ruta_diccionario_id_nlinks) # necesitamos que el diccionario sea persistente entre ejecuciones
         if blob_id in diccionario_id_nlinks:
             cont_links = int(diccionario_id_nlinks[blob_id]) + 1 #no se actuliza el contador (es como si se cambiará el id+1)
             diccionario_id_nlinks[blob_id] = str(cont_links)
@@ -168,7 +155,7 @@ class BlobService(IceDrive.BlobService):
     def unlink(self, blob_id: str, current: Ice.Current = None) -> None:
         """Mark a blob_id as unlinked (removed) from some directory."""
 
-        diccionario_id_nlinks = self.recover_dictionary_links() # necesitamos que el diccionario sea persistente entre ejecuciones
+        diccionario_id_nlinks = self.recover_dictionary(self.ruta_diccionario_id_nlinks) # necesitamos que el diccionario sea persistente entre ejecuciones
         if blob_id in diccionario_id_nlinks:
             cont_links = int(diccionario_id_nlinks[blob_id]) - 1 #no se actuliza el contador (es como si se cambiará el id+1)
             diccionario_id_nlinks[blob_id] = str(cont_links)
@@ -179,7 +166,7 @@ class BlobService(IceDrive.BlobService):
                 file = self.find_file(blob_id)
                 os.remove(file)
                 # Eliminarlo tambien de los archivos de persistencia
-                diccionario_rutas = self.recover_dictionary_paths()
+                diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
                 del diccionario_rutas[file]
                 del diccionario_id_nlinks[blob_id]
                 self.removes_entries_dictionary(diccionario_id_nlinks, diccionario_rutas)
@@ -188,7 +175,7 @@ class BlobService(IceDrive.BlobService):
 
     def find_file(self,blolbid : str) -> str:
         """Find the file with the given blobid."""
-        diccionario_rutas = self.recover_dictionary_paths()
+        diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
         encontrado = False
 
         for key, value in diccionario_rutas.items():
@@ -206,8 +193,8 @@ class BlobService(IceDrive.BlobService):
         """Register a DataTransfer object to upload a file to the service.
             Returns the blob_id of the uploaded file."""
  
-        diccionario_blobs = self.recover_dictionary_links() # necesitamos que el diccionario sea persistente entre ejecuciones
-        diccionario_rutas = self.recover_dictionary_paths()
+        diccionario_blobs = self.recover_dictionary(self.ruta_diccionario_id_nlinks) # necesitamos que el diccionario sea persistente entre ejecuciones
+        diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
         content : str = ""
 
         # En el caso de que sea un archivo nuevo, tendremos que hacer el proceso de subida
@@ -230,7 +217,7 @@ class BlobService(IceDrive.BlobService):
         
         if blob.name_file not in diccionario_rutas:
             self.update_dictionary_paths(blobid, blob.name_file) # nueva entrada en la persistencia de rutas
-            diccionario_rutas = self.recover_dictionary_paths() # actualizamos el diccionario de rutas 
+            diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id) # actualizamos el diccionario de rutas 
 
         # Si fichero ha sido modificado, tendriamos que modificar tanto el diccionario de rutas como el de blobs y sus archivos de persistencia
         if diccionario_rutas[blob.name_file] != blobid:
@@ -261,7 +248,7 @@ class BlobService(IceDrive.BlobService):
         self, blob_id: str, current: Ice.Current = None 
     ) -> IceDrive.DataTransferPrx:
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
-        if blob_id not in self.recover_dictionary_links():
+        if blob_id not in self.recover_dictionary(self.ruta_diccionario_id_nlinks):
             raise IceDrive.UnknownBlob(blob_id)  
     
         fichero = self.find_file(blob_id) # encontremos el fichero en el directorio donde se almacenan los blobs
