@@ -43,7 +43,6 @@ class BlobService(IceDrive.BlobService):
         hash_file = hashlib.sha256(data).hexdigest()     
         return hash_file
 
-    #estos 2 metodos update pueden ser uno solo (o no).
     def update_dictionary(self, blobid: str, current: Ice.Current = None) -> None:
         """Updates the diccionary which is stored in Sistema_directorios/tmp/historial_blob."""
         # Comprobemos si el fichero esta vacío
@@ -66,35 +65,14 @@ class BlobService(IceDrive.BlobService):
             with open(self.ruta_diccionario_path_id, "a") as file:
                 file.write(file_name  + " " + blobid + "\n")
 
-    def update_dictionary_paths_id_changed(self, diccionario_path_id : dict, current: Ice.Current = None) -> None:
-        """Updates the diccionary with a changed blobid which is stored in Sistema_directorios/tmp/historial_rutas."""
-        cont_lines = 0
-
-        if os.stat(self.ruta_diccionario_path_id).st_size != 0:
-            with open(self.ruta_diccionario_path_id, "r") as file:
-                lineas_diccionario = file.readlines()
-
-                for line_file in lineas_diccionario:
-                    line = line_file.split()
-
-                    if line[1] != diccionario_path_id[line[0]]: 
-                        line_changed = str(line[0] + " " + diccionario_path_id[line[0]] + "\n") 
-                        lineas_diccionario[cont_lines] = line_changed
-
-                    cont_lines += 1
-              
-            with open(self.ruta_diccionario_path_id, "w") as file:         
-                file.writelines(lineas_diccionario)
-
-    # ¿Puedes hacer lo mismo con paths id changed?
-    def update_dictionary_links_id_changed(self, diccionario_id_nlinks : dict, current: Ice.Current = None) -> None:
-        """Updates the diccionary with a changed blobid, but remaining its old number of links which is stored in Sistema_directorios/tmp/historial_blob."""
-        with open(self.ruta_diccionario_id_nlinks, "w") as file:
-            for key, value in diccionario_id_nlinks.items():
-                file.write(key + " " + value + "\n")
+    def update_persistence_file(self, diccionario : dict, ruta : str, cuurent: Ice.Current = None) -> None:
+        """Updates the persistence file given as a parameter."""
+        with open(ruta, "w") as file:
+            for key, value in diccionario.items():
+                file.write(key + " " + value + "\n") 
 
     def update_dictionary_links(self, diccionario_id_nlinks : dict, current: Ice.Current = None) -> None:
-        """Updates the links diccionary which is stored in Sistema_directorios/tmp/historial_blob."""
+        """Updates the links diccionary which is stored in Sistema_directorios/tmp/historial_blob.""" 
     
         cont_lines = 0
 
@@ -223,13 +201,13 @@ class BlobService(IceDrive.BlobService):
         if diccionario_rutas[blob.name_file] != blobid:
             aux_nlinks = diccionario_blobs[diccionario_rutas[blob.name_file]] # guardamos el numero de links del fichero antiguo
             del diccionario_blobs[diccionario_rutas[blob.name_file]] # eliminamos la entrada del diccionario de blobs obsoleta 
+            del diccionario_rutas[blob.name_file] # eliminamos la entrada del diccionario de rutas del identificador obsoleto
 
             diccionario_rutas[blob.name_file] = blobid
-            diccionario_blobs[blobid] = aux_nlinks
+            diccionario_blobs[blobid] = aux_nlinks 
 
-            self.update_dictionary_paths_id_changed(diccionario_rutas)
-            self.update_dictionary_links_id_changed(diccionario_blobs) 
-             
+            self.update_persistence_file(diccionario_rutas,self.ruta_diccionario_path_id)
+            self.update_persistence_file(diccionario_blobs,self.ruta_diccionario_id_nlinks)             
 
         # Comprobamos si el blobid ya existe en el diccionario
         if blobid not in diccionario_blobs:
@@ -237,12 +215,12 @@ class BlobService(IceDrive.BlobService):
 
             # Lanzamos un hilo, a modo de temporizador del archivo, para que se elimine si no se ha enlazado
             timer_file = 10
-            hilo = threading.Thread(target=garbage_collector, args=(timer_file,blobid)) 
+            hilo = threading.Thread(target=garbage_collector, args=(timer_file,blobid,self.ruta_diccionario_id_nlinks,)) 
             hilo.daemon = True
             hilo.start() # iniciamos el hilo que se encargara del recolector de basura 
 
-        return blobid 
-        
+        return blobid    
+         
         
     def download(
         self, blob_id: str, current: Ice.Current = None 

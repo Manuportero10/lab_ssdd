@@ -19,7 +19,7 @@ class BlobApp(Ice.Application):
 
         servant = BlobService()
         servant_proxy = adapter.addWithUUID(servant)
-
+        
         logging.info("Proxy: %s", servant_proxy)
 
         self.shutdownOnInterrupt()
