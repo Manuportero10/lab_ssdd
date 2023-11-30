@@ -336,7 +336,7 @@ def non_test_caso1() -> None:
     time.sleep(5) # esperamos 5 segundos simulando complejidad
     BlobService().link(id_blob2) 
 
-def non_test_caso2() -> None:
+def test_caso2() -> None:
     # El usuario sube un archivo que no existe en los archivos de persistencia (texto4.txt), lo enlaza para que no se borre
     # y lo descarga para comprobar que es el mismo que el que ha subido (para este caso, el nuevo archivo se llamaría
     # txCaso2.txt. Borramos el enlace de texto4.txt, por lo que se debería borrar texto4.txt, pero no txCaso2.txt.
@@ -355,7 +355,7 @@ def non_test_caso2() -> None:
     # Conclusión: texto4.txt y txCaso2.txt se borran, no estan en persistencia
 
     # Funciones participantes de este caso - numero de veces ejecutadas:
-    # 1. upload - 3 (uno para texto4.txt y otro para txCaso2.txt)
+    # 1. upload - 3
     # 2. link - 2
     # 3. download - 1
     # 4. unlink - 2
@@ -381,7 +381,7 @@ def non_test_caso2() -> None:
     data_transfer2 = BlobService().download(id_blob)
     assert(data_transfer2 != None)
 
-    # Simulamos la descarga del cliente    
+    # Simulamos la descarga del cliente     
     size = 10
     content = ""
 
