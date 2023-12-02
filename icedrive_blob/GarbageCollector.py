@@ -1,9 +1,10 @@
 import time
-import blob
+import Ice
+import IceDrive
 
-def garbage_collector(timer_file : int, blobid : str,ruta_links : str) -> None:
+def garbage_collector(timer_file : int, blobid : str,ruta_links : str, blob : IceDrive.BlobService) -> None:
     time.sleep(timer_file)
-    dicionary_id_nlinks = blob.BlobService().recover_dictionary(ruta_links)
+    dicionary_id_nlinks = blob.recover_dictionary(ruta_links)
     
-    if blobid in dicionary_id_nlinks and dicionary_id_nlinks[blobid] == "0":
-            blob.BlobService().unlink(blobid)    
+    if blobid in dicionary_id_nlinks and dicionary_id_nlinks[blobid] == "0": 
+            blob.unlink(blobid)    
