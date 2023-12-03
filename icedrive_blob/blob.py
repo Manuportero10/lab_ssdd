@@ -12,12 +12,6 @@ import threading
 from .GarbageCollector import garbage_collector     
 
 
-def decorator(func):
-    def wrapper(self, current=None):
-        result = func(self, current=current)
-        return result
-    return wrapper
- 
 class DataTransfer(IceDrive.DataTransfer):
     """Implementation of an IceDrive.DataTransfer interface."""
     def __init__(self, file : str) -> None: 
@@ -135,6 +129,7 @@ class BlobService(IceDrive.BlobService):
             # Actualizamos el fichero diccionario  
             self.update_dictionary_links(diccionario_id_nlinks)
         else:
+            print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
             raise IceDrive.UnknownBlob(blob_id) 
         
 
@@ -150,15 +145,19 @@ class BlobService(IceDrive.BlobService):
                 self.update_dictionary_links(diccionario_id_nlinks)
             else: # en este caso cont_links = 0, por lo que abria que eliminarlo del diccionario y del directorio donde esta almacenado
                 print("Eliminando archivo.." + blob_id + "\n")
-                file = self.find_file(blob_id)
-                full_path = os.path.join(self.ruta_archivos, file)
+                try:
 
-                os.remove(full_path)
-                # Eliminarlo tambien de los archivos de persistencia
-                diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
-                del diccionario_rutas[file]
-                del diccionario_id_nlinks[blob_id]
-                self.removes_entries_dictionary(diccionario_id_nlinks, diccionario_rutas)
+                    file = self.find_file(blob_id)
+                    full_path = os.path.join(self.ruta_archivos, file)
+                    os.remove(full_path)
+                    # Eliminarlo tambien de los archivos de persistencia
+                    diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
+                    del diccionario_rutas[file]
+                    del diccionario_id_nlinks[blob_id]
+                    self.removes_entries_dictionary(diccionario_id_nlinks, diccionario_rutas)
+                except IceDrive.UnknownBlob:
+                    print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
+                    raise IceDrive.UnknownBlob(blob_id)
         else:
             raise IceDrive.UnknownBlob(blob_id)      
 
@@ -243,6 +242,7 @@ class BlobService(IceDrive.BlobService):
         try:
             fichero = self.find_file(blob_id) # encontremos el fichero en el directorio donde se almacenan los blobs
         except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
+            print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
             raise IceDrive.UnknownBlob(blob_id)
                 
         full_path = os.path.join(self.ruta_archivos, fichero)
