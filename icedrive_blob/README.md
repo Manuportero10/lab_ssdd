@@ -185,6 +185,9 @@ class ClientApp(Ice.Application):
 
 Sabiendo los blob id's de los archivos que tenemos en nuestro directorio, el cliente hará un conjunto de pruebas, intentando abarca el mayor número de casos de uso y de causisticas posibles. para eso, sería bastante conveniendo realizar cobertura de código, pero hasta la fecha desconozco como hacerlo para el cliente, ya que en local si lo hacia porque llamaba directamente al archivo test_blob.py para realizar la cobertura, ahora como lo que ejecutamos es un comando generado por el archivo .toml y le pasamos como argumento el proxy del servicio blob, desconozco cómo hacerlo (está en proceso saberlo).
 
+Para cada prueba, creamos un data_transfer_prx independiente para cada prueba, debido a que daría errores, si previamente hemos usado el proxy para leer, (por ejemplo para descargar el contenido de un archivo) a la hora de pasar el mismo objeto proxy al metodo upload, hace que como ya ha leido el archivo, a la hora de volver a leer el archivo, no genera error, sino que se generaría un blobid erroneo.
+
+
 **NOTA**: antes de ejecutar el cliente, tendriamos que asegurarnos que el estado de los archivos sean los siguientes:
 
 - texto1.txt
