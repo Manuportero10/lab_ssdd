@@ -2,6 +2,7 @@
 
 
 **Autor**: Manuel Cano García
+
 **Correo**: Manuel.Cano3@alu.uclm.es
 
 ---
@@ -18,7 +19,7 @@ Una vez comprobado que el funcionamiento en local funciona como debería, ahora 
     ) -> IceDrive.DataTransferPrx:
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
         try:
-            fichero = self.find_file(blob_id) # encontremos el fichero en el directorio donde se almacenan los blobs
+            fichero = self.find_file(blob_id,self.ruta_archivos) # encontremos el fichero en el directorio donde se almacenan los blobs
         except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
             print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
             raise IceDrive.UnknownBlob(blob_id)
@@ -32,13 +33,13 @@ Una vez comprobado que el funcionamiento en local funciona como debería, ahora 
         return data_transfer_prx 
 ```
 
-Lo primero a realizar, sería encontrar el archivo, dentro de donde guardemos los archivos blob, saber saber si realmente el blob_id que le pasamos corresponde con un archivo, una vez encontrado el archivo, lo concatenamos con su ruta y creamos un objeto **DataTransfer** con el archivo obtenido, gracias a que en el constructor le hemos pasado el archivo, el objeto DataTransfer ya tiene el descriptor del archivo, así que cuando haga las llamadas ```read()``` correspondientes, leerá el contenido del archivo en cuestión.
+Lo primero a realizar, sería encontrar el archivo dentro de donde guarde el usuario sus archivos, para saber si realmente el blob_id que le pasamos corresponde con un archivo real, una vez encontrado el archivo, lo concatenamos con su ruta y creamos un objeto **DataTransfer** con el archivo obtenido, gracias a que en el constructor le hemos pasado el archivo, el objeto DataTransfer ya tiene el descriptor del archivo, así que cuando haga las llamadas ```read()``` correspondientes, leerá el contenido del archivo en cuestión.
 <br>
 
  - **upload**
 
  ```python
-     def upload( # Es posible que no sea necesario el filename, porque nos lo tiene que pasar el cliente, pero para probar la lógica
+    def upload( # Es posible que no sea necesario el filename, porque nos lo tiene que pasar el cliente, pero para probar la lógica
         self, blob: IceDrive.DataTransferPrx, current: Ice.Current = None 
     ) -> str:
         """Register a DataTransfer object to upload a file to the service.
@@ -65,7 +66,12 @@ Lo primero a realizar, sería encontrar el archivo, dentro de donde guardemos lo
         # Comprobamos si el blobid ya existe en el diccionario
         if blobid not in diccionario_blobs:
             self.update_dictionary(blobid)
-            file_name = self.find_file(blobid) # obtenemos el nombre del fichero
+            file_name = blobid + ".txt"
+            # añadimos el contenido del archivo en blobid.txt - lo creamos en nuestra persistencia
+            full_path = os.path.join(self.ruta_persistencia, file_name)
+            with open(full_path, "w") as file:
+                file.write(content)
+            
             self.update_dictionary_paths(blobid, file_name) # actualizamos el diccionario de rutas
 
             # Lanzamos un hilo, a modo de temporizador del archivo, para que se elimine si no se ha enlazado
@@ -79,10 +85,11 @@ Lo primero a realizar, sería encontrar el archivo, dentro de donde guardemos lo
         return blobid 
  ``` 
 
-A traves del objeto proxy, realizamos un bucle para leer el contenido del archivo, después de eso, dicho contenido lo pasamos a la suma hash **sha256**. También comprobaremos si el blob obtenido esta ya guardado dentro de nuestro archivo de persistencia donde guardamos los blob_id, junto con su numero de enlaces, si ya está, simplemente devolvemos el blobid, en caso contrario, eso significará que un archivo nuevo a subir, por lo que actualizamos los diccionarios y creamos un hilo, que se esté ejecutando en segundo plano con la propiedad daemon.  
+A traves del objeto proxy, realizamos un bucle para leer el contenido del archivo, después de eso, dicho contenido lo pasamos a la suma hash **sha256**. También comprobaremos si el blob obtenido esta ya guardado dentro de nuestro diccionario donde guardamos los blob_id, junto con su numero de enlaces, si ya está, simplemente devolvemos el blobid, en caso contrario, eso significará que un archivo en nuestro directorio de persistencia donde guardamos los archivos blob que el cliente ya ha subido por lo que actualizamos los diccionarios, creamos un archivo "blobid".txt donde tendrá el contenido del archivo del cliente y por ultimo creamos un hilo, que se esté ejecutando en segundo plano con la propiedad daemon.  
 ```python 
 hilo.daemon = True
 ```
+Al ser un archivo nuevo en nuestro directorio de persistencia, el numero de enlaces de ese archivo es de 0, por esa razón, creamos el hilo, para ver si pasado x tiempo, dicho archivo sigue teniendo 0 enlaces, para eliminarlo a traves del recolector de basura.
 
 Mas allá de estos cambios, los demás métodos utilizados en la implementación local, no se han visto afectado por la utilización del middleware, por lo que su lógica esta intacta con respecto a local.
 
@@ -135,7 +142,7 @@ class ClientApp(Ice.Application):
             
             print("Proxy blob: ", blob_prx, " creado correctamente\n")
 
-            data_transfer_prx = prueba_download(self,blob_prx, id_blob)
+            data_transfer_prx = test_download(self,blob_prx, id_blob)
 
             if data_transfer_prx is None:
                 print("Error al descargar el archivo\n")
@@ -145,9 +152,9 @@ class ClientApp(Ice.Application):
 
             # --------------------------PRUEBAS PARA texto2.txt--------------------------------
             print("\n--------------------------------[PRUEBAS PARA texto2.txt]--------------------------------------------\n")
-            prueba_upload(self, blob_prx,id_blob) #upload a un archivo que ya existe en persistencia (texto2.txt)
-            prueba_link(self,blob_prx,id_blob) #creamos un enlace a un archivo que ya tiene un enlace (texto2.txt)
-            #prueba_unlink(self,blob_prx,id_blob) # eliminamos un enlace de un archivo que tiene mas de un enlace (texto2.txt)
+            test_upload(self, blob_prx,id_blob) #upload a un archivo que ya existe en persistencia (texto2.txt)
+            test_link(self,blob_prx,id_blob) #creamos un enlace a un archivo que ya tiene un enlace (texto2.txt)
+            test_unlink(self,blob_prx,id_blob) # eliminamos un enlace de un archivo que tiene mas de un enlace (texto2.txt)
             # Como hacemos un link y un unlink sobre el mismo archivo, el numero de enlaces no deberia cambiar
             print(label_fin)
             #-----------------------------------------------------------------------------------
@@ -155,27 +162,31 @@ class ClientApp(Ice.Application):
 
             # --------------------------PRUEBAS PARA texto3.txt--------------------------------
             print("\n--------------------------------[PRUEBAS PARA texto3.txt]--------------------------------------------\n")
-            prueba_upload_new_file(self, blob_prx,id_blob2) #upload a un archivo que no existe en persistencia (texto3.txt)
+            test_upload_new_file(self, blob_prx,id_blob2) #upload a un archivo que no existe en persistencia (texto3.txt)
             time.sleep(5) # simulamos complejidad
-            prueba_link(self,blob_prx,id_blob2) # creamos un enlace a un archivo que no tiene enlaces (texto3.txt) para que no se borre por el recolector de basura
+            test_link(self,blob_prx,id_blob2) # creamos un enlace a un archivo que no tiene enlaces (texto3.txt) para que no se borre por el recolector de basura
             time.sleep(5)
-            prueba_unlink_remove(self,blob_prx,id_blob2) # eliminamos un enlace de un archivo que solo tiene un enlace (texto3.txt)
+            test_unlink_remove(self,blob_prx,id_blob2) # eliminamos un enlace de un archivo que solo tiene un enlace (texto3.txt)
             print(label_fin)
             #-----------------------------------------------------------------------------------
 
             # --------------------------PRUEBAS PARA texto4.txt-------------------------------- 
             print("\n--------------------------------[PRUEBAS PARA texto4.txt]--------------------------------------------\n")
-            prueba_upload_new_file(self, blob_prx,id_blob3_mod) #upload a un archivo que no existe en persistencia (texto4.txt)
+            test_upload_new_file(self, blob_prx,id_blob3_mod) #upload a un archivo que no existe en persistencia (texto4.txt)
             time.sleep(4) # simulamos complejidad
-            prueba_link(self,blob_prx,id_blob3_mod) # creamos un enlace a un archivo que no tiene enlaces (texto4.txt) para que no se borre por el recolector de basura
+            test_link(self,blob_prx,id_blob3_mod) # creamos un enlace a un archivo que no tiene enlaces (texto4.txt) para que no se borre por el recolector de basura
             time.sleep(8)
-            prueba_link(self,blob_prx,id_blob3) # creamos un enlace a un archivo que no tiene enlaces (texto4.txt) para que no se borre por el recolector de basura  
+            try:
+                test_link(self,blob_prx,id_blob3) # creamos un enlace a un archivo que no tiene enlaces (texto4.txt) para que no se borre por el recolector de basura  
+            except IceDrive.UnknownBlob:
+                print("Error: El archivo no existe en persistencia: " + id_blob3) # este id no existe en el directorio del cliente
+            
             print(label_fin)
             #-----------------------------------------------------------------------------------
 
             # --------------------------PRUEBAS PARA texto1.txt--------------------------------
             print("\n--------------------------------[PRUEBAS PARA texto1.txt]--------------------------------------------\n")
-            prueba_upload(self, blob_prx,id_blob4) #upload a un archivo que no existe en persistencia (texto1.txt)
+            test_upload(self, blob_prx,id_blob4) #upload a un archivo que no existe en persistencia (texto1.txt)
             time.sleep(13) # simulamos complejidad - 10 segundos es el tiempo de vida de un archivo en persistencia sin tener un enlace
             # Como no tenemos ningun enlace al archivo, este deberia ser borrado por el recolector de basura
             print("fin del cliente\n")
@@ -183,12 +194,14 @@ class ClientApp(Ice.Application):
             return 0
 ```
 
-Sabiendo los blob id's de los archivos que tenemos en nuestro directorio, el cliente hará un conjunto de pruebas, intentando abarca el mayor número de casos de uso y de causisticas posibles. para eso, sería bastante conveniendo realizar cobertura de código, pero hasta la fecha desconozco como hacerlo para el cliente, ya que en local si lo hacia porque llamaba directamente al archivo test_blob.py para realizar la cobertura, ahora como lo que ejecutamos es un comando generado por el archivo .toml y le pasamos como argumento el proxy del servicio blob, desconozco cómo hacerlo (está en proceso saberlo).
+Sabiendo los blob id's de los archivos que tenemos en nuestro directorio, el cliente hará un conjunto de pruebas, intentando abarca el mayor número de casos de uso y de causisticas posibles. para eso, sería bastante conveniente realizar cobertura de código, pero hasta la fecha desconozco como hacerlo para el cliente, ya que en local si lo hacia porque llamaba directamente al archivo test_blob.py para realizar la cobertura, ahora como lo que ejecutamos es un comando generado por el archivo .toml y le pasamos como argumento el proxy del servicio blob, desconozco cómo hacerlo (está en proceso saberlo).
+
+Independientemente de lo útil que sería hacer cobertura de código, tengo que recalcar que el conjunto de pruebas escogido, como dije en el parrafo anterior, intenta abarcar la mayoría de casos de uso, con nuestras pruebas, realizamos llamadas a todas los métodos que proporciona nuestro BlobService de cara a que el cliente lo use (download, upload, link, unlink, read, close) y en las "PRUEBAS PARA texto4.txt" se da el caso de que el blobid no existe en el directorio del cliente, por lo que retornaría una excepción. También en "PRUEBAS PARA texto1.txt" se da la causistica de que al cliente se le olvida hacer el link al archivo que acaba de seguir, por lo que el recolector de basura actuará, borrando el archivo tanto del directorio de persistencia de nuestro servicio, como del directorio del cliente.
 
 Para cada prueba, creamos un data_transfer_prx independiente para cada prueba, debido a que daría errores, si previamente hemos usado el proxy para leer, (por ejemplo para descargar el contenido de un archivo) a la hora de pasar el mismo objeto proxy al metodo upload, hace que como ya ha leido el archivo, a la hora de volver a leer el archivo, no genera error, sino que se generaría un blobid erroneo.
 
 
-**NOTA**: antes de ejecutar el cliente, tendriamos que asegurarnos que el estado de los archivos sean los siguientes:
+**NOTA**: antes de ejecutar el cliente, tendriamos que asegurarnos que el estado de los archivos sean los siguientes en el directorio Sistema_directorios/home, correspondiente al directorio del cliente/usuario:
 
 - texto1.txt
 

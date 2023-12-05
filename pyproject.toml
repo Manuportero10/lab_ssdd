@@ -22,13 +22,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tests = ["pytest"]
+tests = ["pytest","pytest-cov"]
 linters = ["black", "ruff", "pydocstyle"]
 
 [project.urls]
 "Homepage" = "https://github.com/Manuportero10/lab_ssdd"  
 
+
 [project.scripts]
 icedrive-blob = "icedrive_blob.app:main"
-icedrive-blob-client = "icedrive_blob.test_app.command_line_handlers:client"
-icedrive-blob-server = "icedrive_blob.test_app.command_line_handlers:server"
+icedrive-blob-client = "icedrive_blob.test_command_line_handlers:test_client"
+icedrive-blob-server = "icedrive_blob.test_command_line_handlers:test_server"
+
