@@ -96,6 +96,7 @@ Mas allá de estos cambios, los demás métodos utilizados en la implementación
 ---
 
 ### Pruebas
+Algo nuevo a saber, es que ahora en nuestro Sistema_directorios existe un nuevo directorio /bin donde guardaremos los archivos que el cliente nos ha pasado y tienen almenos un enlace, este seria nuestro directorio de persistencia del servicio. Esto considero que es correcto, debido a que asi desacoplamos el contenido de nuestro directorio de persistencia /bin, que funciona como un almacen de archivos pasados por el cliente, mientras que el directorio /home hace referencia al directorio "real" que tiene el cliente y donde el propio cliente hace sus operaciones. A diferencia que la prueba en local, no haciamos esta distinción, pero pienso que es importante a la hora de entender el servicio BlobService. 
 
 Para comprobar que nuestro servicio funciona correctamente, hemos creado un programa cliente que realizará las llamadas a nuestro servicio. Para ello, en nuestro archivo .toml, hemos añadido lo siguiente para poder ejecutar tanto el cliente como el servidor, tal y como hacemos en el ejemplo de la calculadora de clase:
 

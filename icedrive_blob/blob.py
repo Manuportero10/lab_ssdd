@@ -21,7 +21,7 @@ class DataTransfer(IceDrive.DataTransfer):
     def read(self, size : int, current: Ice.Current = None) -> bytes:
         """Returns a list of bytes from the opened file with the size specified."""
         try:
-            content : bytes = self.file.read(size).encode()
+            content : bytes = self.file.read(size).encode() 
             return content
         except Exception:
             raise IceDrive.FailedToReadData()
@@ -39,6 +39,7 @@ class BlobService(IceDrive.BlobService):
         self.ruta_diccionario_id_nlinks = "icedrive_blob/Sistema_directorios/tmp/historial_blob.txt" 
         self.ruta_diccionario_path_id = "icedrive_blob/Sistema_directorios/tmp/historial_rutas.txt"
         self.ruta_archivos = "icedrive_blob/Sistema_directorios/home"
+        self.ruta_persistencia = "icedrive_blob/Sistema_directorios/bin"
 
     def convert_text_to_hash(self, data: str, current: Ice.Current = None) -> str:
         """Converts the text to hash."""
@@ -147,10 +148,14 @@ class BlobService(IceDrive.BlobService):
                 print("Eliminando archivo.." + blob_id + "\n")
                 try:
 
-                    file = self.find_file(blob_id)
-                    full_path = os.path.join(self.ruta_archivos, file)
+                    file = self.find_file(blob_id,self.ruta_persistencia) # lo eleiminamos de nuestra persistencia
+                    full_path = os.path.join(self.ruta_persistencia, file)
                     os.remove(full_path)
-                    # Eliminarlo tambien de los archivos de persistencia
+                    # Eliminarlo tambien de los archivos de persistencia del cliente
+                    file_cliente = self.find_file(blob_id,self.ruta_archivos) # lo eleiminamos de la persistencia del cliente
+                    full_path_cliente = os.path.join(self.ruta_archivos, file_cliente)
+                    os.remove(full_path_cliente)
+
                     diccionario_rutas = self.recover_dictionary(self.ruta_diccionario_path_id)
                     del diccionario_rutas[file]
                     del diccionario_id_nlinks[blob_id]
@@ -171,7 +176,7 @@ class BlobService(IceDrive.BlobService):
                 hash_calculado.update(bloque)
         return hash_calculado.hexdigest()
 
-    def find_file(self, blolbid : str) -> str:
+    def find_file(self, blolbid : str, path : str) -> str:
         """Find the file with the given blobid."""
 
         encontrado = False
@@ -179,8 +184,8 @@ class BlobService(IceDrive.BlobService):
 
         # Recorremos el directorio donde se almacenan los blobs y calculamos el hash de cada uno de ellos
         # Para saber si el blobid que nos pasan como parametro esta almacenado en el directorio
-        for elemento in os.listdir(self.ruta_archivos):
-            ruta_completa = os.path.join(self.ruta_archivos, elemento)
+        for elemento in os.listdir(path):
+            ruta_completa = os.path.join(path, elemento)
             if os.path.isfile(ruta_completa):
                 hash_archivo = self.calcular_hash_archivo(ruta_completa, 10)
                 hashes[elemento] = hash_archivo
@@ -221,7 +226,12 @@ class BlobService(IceDrive.BlobService):
         # Comprobamos si el blobid ya existe en el diccionario
         if blobid not in diccionario_blobs:
             self.update_dictionary(blobid)
-            file_name = self.find_file(blobid) # obtenemos el nombre del fichero
+            file_name = blobid + ".txt"
+            # añadimos el contenido del archivo en blobid.txt - lo creamos en nuestra persistencia
+            full_path = os.path.join(self.ruta_persistencia, file_name)
+            with open(full_path, "w") as file:
+                file.write(content)
+            
             self.update_dictionary_paths(blobid, file_name) # actualizamos el diccionario de rutas
 
             # Lanzamos un hilo, a modo de temporizador del archivo, para que se elimine si no se ha enlazado
@@ -240,7 +250,7 @@ class BlobService(IceDrive.BlobService):
     ) -> IceDrive.DataTransferPrx:
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
         try:
-            fichero = self.find_file(blob_id) # encontremos el fichero en el directorio donde se almacenan los blobs
+            fichero = self.find_file(blob_id,self.ruta_archivos) # encontremos el fichero en el directorio donde se almacenan los blobs
         except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
             print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
             raise IceDrive.UnknownBlob(blob_id)
