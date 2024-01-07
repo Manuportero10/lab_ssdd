@@ -30,10 +30,15 @@ class DataTransfer(IceDrive.DataTransfer):
 
 class BlobService(IceDrive.BlobService):
     """Implementation of an IceDrive.BlobService interface."""
-    def __init__(self):
+    def __init__(self, query_publisher) -> None:
         self.ruta_diccionario_id_nlinks = "icedrive_blob/Sistema_directorios/tmp/historial_blob.txt"
         self.ruta_diccionario_path_id = "icedrive_blob/Sistema_directorios/tmp/historial_rutas.txt"
         self.ruta_persistencia = "icedrive_blob/Sistema_directorios/bin"
+        
+        self.query_pub = query_publisher
+        self.expected_responses = {}
+
+
 
     def convert_text_to_hash(self, data: str, current: Ice.Current = None) -> str:
         """Converts the text to hash."""
@@ -159,7 +164,7 @@ class BlobService(IceDrive.BlobService):
 
 
     def upload(
-        self, blob: IceDrive.DataTransferPrx, current: Ice.Current = None
+        self, user: IceDrive.UserPrx, blob: IceDrive.DataTransferPrx, current: Ice.Current = None
     ) -> str:
         """Register a DataTransfer object to upload a file to the service.
             Returns the blob_id of the uploaded file."""
@@ -211,7 +216,7 @@ class BlobService(IceDrive.BlobService):
 
 
     def download(
-        self, blob_id: str, current: Ice.Current = None
+        self, user: IceDrive.UserPrx, blob_id: str, current: Ice.Current = None
     ) -> IceDrive.DataTransferPrx:
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
         try:

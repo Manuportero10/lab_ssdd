@@ -4,7 +4,6 @@ import sys
 
 from .app import BlobApp, ClientApp
 
-
 def test_client() -> int:
     """Handler for 'ice-calculator-client'."""
     app = ClientApp()

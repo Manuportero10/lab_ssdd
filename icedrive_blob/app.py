@@ -3,28 +3,72 @@
 import logging
 import sys
 import time
-
+import threading
 from typing import List
 
 import Ice
 import IceDrive
+import IceStorm
 
 from .blob import BlobService, DataTransfer
-
-label_fin = "\n--------------------------------------[FIN]-----------------------------------------------------------\n"
+from .delayed_response import BlobQueryResponse
+from .discovery import Discovery
 
 class BlobApp(Ice.Application):
     """Implementation of the Ice.Application for the blob service."""
 
     def run(self, args: List[str]) -> int:
         """Execute the code for the BlobApp class."""
+        print("Iniciando servidor...\n")
+
+        properties = self.communicator().getProperties()
+        topic_name = properties.getProperty("Discovery.Topic")
+        topic_manager = IceStorm.TopicManagerPrx.checkedCast(
+            self.communicator().propertyToProxy("IceStorm.Proxy")
+        )
+
+        try:
+            topic = topic_manager.retrieve(topic_name)
+        except IceStorm.NoSuchTopic:
+            topic = topic_manager.create(topic_name)
+            
+        print("Topic name: ", topic_name, "\nObject: ", topic, "\n")
+        
+        discovery_pub = IceDrive.DiscoveryPrx.uncheckedCast(topic.getPublisher())  # es el que envia los anuncios de los otros servicios
+        print("Publisher: ", discovery_pub, "\n")
+        
         adapter = self.communicator().createObjectAdapter("BlobAdapter")
         adapter.activate()
 
-        servant = BlobService()
-        servant_proxy = adapter.addWithUUID(servant) 
+        servant = BlobService(discovery_pub)
+        discovery_servant = Discovery()
+        publisher_discovery_servant = Discovery()
+        servant_proxy = adapter.addWithUUID(servant) # Creamos el proxy del servicio
+        discovery = adapter.addWithUUID(discovery_servant)
+        discovery_publisher = adapter.addWithUUID(publisher_discovery_servant)
         
+        discovery_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery) # Creamos el proxy del servicio de descubrimiento
+        publisher_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery_publisher) # Creamos el proxy del publisher
+
+        print("Discovery:", discovery_proxy, "\n")
+        topic.subscribeAndGetPublisher({},discovery_proxy) # es el que recibe los anuncios de los otros servicios
+
+        '''
+                lista_subscribers = topic.getSubscribers()
+        for subscriber in lista_subscribers:
+            print("Subscriber: ", subscriber, "\n")
+        '''
+                    
         logging.info("Proxy: %s", servant_proxy)
+        blob_prx = IceDrive.BlobServicePrx.checkedCast(servant_proxy)
+
+        # Una vez obtenido el proxy del servicio, lo registramos en el servicio de descubrimiento cada 5 secs
+        
+        hilo = threading.Thread(target=descubrimiento,
+                                args=(blob_prx,publisher_proxy,))
+        hilo.daemon = True
+        hilo.start() # iniciamos el hilo que se encargara del recolector de basura
+        
 
         self.shutdownOnInterrupt()
         self.communicator().waitForShutdown()
@@ -32,6 +76,12 @@ class BlobApp(Ice.Application):
         print("fin del servidor\n")
 
         return 0
+
+def descubrimiento(proxy : IceDrive.BlobServicePrx, discovery_pub : IceDrive.Discovery):
+    while True:
+        time.sleep(5)
+        discovery_pub.announceBlobService(proxy)
+        print("Anuncio enviado\n")
 
 class ClientApp(Ice.Application):
         """Client application."""
