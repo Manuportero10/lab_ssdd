@@ -32,3 +32,13 @@ class Discovery(IceDrive.Discovery):
         if prx not in self.lista_blobs: # Controlamos la redundancia de anuncios
             print("\n[BLOB]: Anuncio recivido ", prx)
             self.lista_blobs.append(prx)
+
+    def get_BlobService(self) -> IceDrive.BlobServicePrx:
+        return self.lista_blobs[0]
+    
+    def get_Authentication(self) -> IceDrive.AuthenticationPrx:
+        return self.lista_authentications[0]
+    
+    def get_Directory(self) -> IceDrive.DirectoryServicePrx :
+        return self.lista_directories[0]
+

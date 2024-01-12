@@ -42,22 +42,17 @@ class BlobApp(Ice.Application):
 
         servant = BlobService(discovery_pub)
         discovery_servant = Discovery()
-        publisher_discovery_servant = Discovery()
+        #publisher_discovery_servant = Discovery()
         servant_proxy = adapter.addWithUUID(servant) # Creamos el proxy del servicio
         discovery = adapter.addWithUUID(discovery_servant)
-        discovery_publisher = adapter.addWithUUID(publisher_discovery_servant)
+        #discovery_publisher = adapter.addWithUUID(discovery_pub)
         
         discovery_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery) # Creamos el proxy del servicio de descubrimiento
-        publisher_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery_publisher) # Creamos el proxy del publisher
+        #publisher_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery_publisher) # Creamos el proxy del publisher
 
         print("Discovery:", discovery_proxy, "\n")
         topic.subscribeAndGetPublisher({},discovery_proxy) # es el que recibe los anuncios de los otros servicios
 
-        '''
-                lista_subscribers = topic.getSubscribers()
-        for subscriber in lista_subscribers:
-            print("Subscriber: ", subscriber, "\n")
-        '''
                     
         logging.info("Proxy: %s", servant_proxy)
         blob_prx = IceDrive.BlobServicePrx.checkedCast(servant_proxy)
@@ -65,14 +60,15 @@ class BlobApp(Ice.Application):
         # Una vez obtenido el proxy del servicio, lo registramos en el servicio de descubrimiento cada 5 secs
         
         hilo = threading.Thread(target=descubrimiento,
-                                args=(blob_prx,publisher_proxy,))
+                                args=(blob_prx,discovery_pub,))
         hilo.daemon = True
         hilo.start() # iniciamos el hilo que se encargara del recolector de basura
         
-
         self.shutdownOnInterrupt()
         self.communicator().waitForShutdown()
-
+        
+        print("\n ======Servicios elegidos===== \n","[BLOB]",discovery_servant.get_BlobService(),"\n[DISCOVERY]",discovery_servant.get_Authentication(),
+              "\n[DIRECTORY]",discovery_servant.get_Directory())
         print("fin del servidor\n")
 
         return 0
@@ -82,6 +78,7 @@ def descubrimiento(proxy : IceDrive.BlobServicePrx, discovery_pub : IceDrive.Dis
         time.sleep(5)
         discovery_pub.announceBlobService(proxy)
         print("Anuncio enviado\n")
+
 
 class ClientApp(Ice.Application):
         """Client application."""

@@ -168,50 +168,53 @@ class BlobService(IceDrive.BlobService):
     ) -> str:
         """Register a DataTransfer object to upload a file to the service.
             Returns the blob_id of the uploaded file."""
-        # recuperamos los diccionarios de los archivos de persistencia
-        diccionario_blobs = self.recover_dictionary(self.ruta_diccionario_id_nlinks)
-        diccionario_paths = self.recover_dictionary(self.ruta_diccionario_path_id)
-        content : str = ""
+        # lo primero: vamos a comprobar si el usuario esta activo
+        if user.verifyUser():
+            # recuperamos los diccionarios de los archivos de persistencia
+            diccionario_blobs = self.recover_dictionary(self.ruta_diccionario_id_nlinks)
+            diccionario_paths = self.recover_dictionary(self.ruta_diccionario_path_id)
+            content : str = ""
 
-        # En el caso de que sea un archivo nuevo, tendremos que hacer el proceso de subida
-        size = 10
-        while True:
-            try:
-                data = blob.read(size)
-                content += data.decode()
-                if not data or len(data) == 0:
-                    blob.close()
-                    break
-            except IceDrive.FailedToReadData:
-                raise IceDrive.FailedToReadData()
+            # En el caso de que sea un archivo nuevo, tendremos que hacer el proceso de subida
+            size = 10
+            while True:
+                try:
+                    data = blob.read(size)
+                    content += data.decode()
+                    if not data or len(data) == 0:
+                        blob.close()
+                        break
+                except IceDrive.FailedToReadData:
+                    raise IceDrive.FailedToReadData()
 
-        # convertimos el contenido del fichero en hash
-        blobid = self.convert_text_to_hash(content.encode())
-        print("blobid: ", blobid, "\n")
+            # convertimos el contenido del fichero en hash
+            blobid = self.convert_text_to_hash(content.encode())
+            print("blobid: ", blobid, "\n")
 
-        # Comprobamos si el blobid ya existe en el diccionario
-        if blobid not in diccionario_blobs:
-            self.update_dictionary(blobid)
-            file_name = blobid + ".txt"
-            # añadimos el contenido del archivo en blobid.txt - lo creamos en nuestra persistencia
-            full_path = os.path.join(self.ruta_persistencia, file_name)
-            with open(full_path, "w") as file:
-                file.write(content)
+            # Comprobamos si el blobid ya existe en el diccionario
+            if blobid not in diccionario_blobs:
+                self.update_dictionary(blobid)
+                file_name = blobid + ".txt"
+                # añadimos el contenido del archivo en blobid.txt - lo creamos en nuestra persistencia
+                full_path = os.path.join(self.ruta_persistencia, file_name)
+                with open(full_path, "w") as file:
+                    file.write(content)
 
-            # actualizamos el fichero de persistencia
-            diccionario_paths[file_name] = blobid
-            self.update_persistence_file(diccionario_paths,self.ruta_diccionario_path_id)
+                # actualizamos el fichero de persistencia
+                diccionario_paths[file_name] = blobid
+                self.update_persistence_file(diccionario_paths,self.ruta_diccionario_path_id)
 
-            # Lanzamos un hilo, a modo de temporizador del archivo
-            # para que se elimine si no se ha enlazado
-            timer_file = 10
-            hilo = threading.Thread(target=garbage_collector,
-                                    args=(timer_file,blobid,self.ruta_diccionario_id_nlinks,self,))
-            hilo.daemon = True
-            hilo.start() # iniciamos el hilo que se encargara del recolector de basura
+                # Lanzamos un hilo, a modo de temporizador del archivo
+                # para que se elimine si no se ha enlazado
+                timer_file = 10
+                hilo = threading.Thread(target=garbage_collector,
+                                        args=(timer_file,blobid,self.ruta_diccionario_id_nlinks,self,))
+                hilo.daemon = True
+                hilo.start() # iniciamos el hilo que se encargara del recolector de basura
+            else:
+                return blobid
         else:
-            return blobid
-
+            raise IceDrive.TemporaryUnavailable()
         return blobid
 
 
@@ -219,17 +222,21 @@ class BlobService(IceDrive.BlobService):
         self, user: IceDrive.UserPrx, blob_id: str, current: Ice.Current = None
     ) -> IceDrive.DataTransferPrx:
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
-        try:
-            # encontremos el fichero en el directorio donde se almacenan los blobs
-            fichero = self.find_file(blob_id,self.ruta_persistencia)
-        except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
-            print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
-            raise IceDrive.UnknownBlob(blob_id)
+                # lo primero: vamos a comprobar si el usuario esta activo
+        if user.verifyUser():
+            try:
+                # encontremos el fichero en el directorio donde se almacenan los blobs
+                fichero = self.find_file(blob_id,self.ruta_persistencia)
+            except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
+                print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
+                raise IceDrive.UnknownBlob(blob_id)
 
-        full_path = os.path.join(self.ruta_persistencia, fichero)
+            full_path = os.path.join(self.ruta_persistencia, fichero)
 
-        servant = DataTransfer(full_path)
-        prx = current.adapter.addWithUUID(servant)
-        data_transfer_prx = IceDrive.DataTransferPrx.uncheckedCast(prx)
+            servant = DataTransfer(full_path)
+            prx = current.adapter.addWithUUID(servant)
+            data_transfer_prx = IceDrive.DataTransferPrx.uncheckedCast(prx)
+        else:
+            raise IceDrive.TemporaryUnavailable()
 
         return data_transfer_prx
