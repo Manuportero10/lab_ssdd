@@ -18,19 +18,19 @@ class Discovery(IceDrive.Discovery):
     def announceAuthentication(self, prx: IceDrive.AuthenticationPrx, current: Ice.Current = None) -> None:
         """Receive an Authentication service announcement."""
         if prx not in self.lista_authentications: # Controlamos la redundancia de anuncios
-            print("\n[AUTHENTICATION]: Anuncio recivido ", prx)
+            print("\n[AUTHENTICATION]: Anuncio recibido ", prx)
             self.lista_authentications.append(prx)
 
     def announceDirectoryService(self, prx: IceDrive.DirectoryServicePrx, current: Ice.Current = None) -> None:
         """Receive an Directory service announcement."""
         if prx not in self.lista_directories: # Controlamos la redundancia de anuncios
-            print("\n[DIRECTORY]: Anuncio recivido ", prx)
+            print("\n[DIRECTORY]: Anuncio recibido ", prx)
             self.lista_directories.append(prx)
 
     def announceBlobService(self, prx: IceDrive.BlobServicePrx, current: Ice.Current = None) -> None:
         """Receive an Blob service announcement."""
         if prx not in self.lista_blobs: # Controlamos la redundancia de anuncios
-            print("\n[BLOB]: Anuncio recivido ", prx)
+            print("\n[BLOB]: Anuncio recibido ", prx)
             self.lista_blobs.append(prx)
 
     def get_BlobService(self) -> IceDrive.BlobServicePrx:

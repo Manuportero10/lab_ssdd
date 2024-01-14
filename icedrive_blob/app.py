@@ -11,7 +11,7 @@ import IceDrive
 import IceStorm
 
 from .blob import BlobService, DataTransfer
-from .delayed_response import BlobQueryResponse
+from .delayed_response import BlobQueryResponse, BlobQuery
 from .discovery import Discovery
 
 class BlobApp(Ice.Application):
@@ -26,33 +26,48 @@ class BlobApp(Ice.Application):
         topic_manager = IceStorm.TopicManagerPrx.checkedCast(
             self.communicator().propertyToProxy("IceStorm.Proxy")
         )
+        topic_delayed_response_name = properties.getProperty("Blob.DeferredResolution.Topic")
 
         try:
             topic = topic_manager.retrieve(topic_name)
+            topic_delayed_response = topic_manager.retrieve(topic_delayed_response_name)
         except IceStorm.NoSuchTopic:
             topic = topic_manager.create(topic_name)
+            topic_delayed_response = topic_manager.create(topic_delayed_response_name)
             
         print("Topic name: ", topic_name, "\nObject: ", topic, "\n")
+        print("Topic name (delayed response): ", topic_delayed_response_name, "\nObject: ", topic_delayed_response, "\n")
         
         discovery_pub = IceDrive.DiscoveryPrx.uncheckedCast(topic.getPublisher())  # es el que envia los anuncios de los otros servicios
+        delayed_query_pub = IceDrive.BlobQueryPrx.uncheckedCast(topic_delayed_response.getPublisher()) # es el que envia las peticiones de los otros servicios
         print("Publisher: ", discovery_pub, "\n")
         
         adapter = self.communicator().createObjectAdapter("BlobAdapter")
         adapter.activate()
 
-        servant = BlobService(discovery_pub)
-        discovery_servant = Discovery()
-        #publisher_discovery_servant = Discovery()
+        
+        discovery_servant = Discovery() #sirviente del servicio de descubrimiento receptor
+
+        #delay_response_servant = BlobQueryResponse() #sirviente del servicio de respuesta diferida receptor
+        
+        servant = BlobService(discovery_servant,delayed_query_pub)
+        
         servant_proxy = adapter.addWithUUID(servant) # Creamos el proxy del servicio
         discovery = adapter.addWithUUID(discovery_servant)
-        #discovery_publisher = adapter.addWithUUID(discovery_pub)
-        
-        discovery_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery) # Creamos el proxy del servicio de descubrimiento
-        #publisher_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery_publisher) # Creamos el proxy del publisher
 
-        print("Discovery:", discovery_proxy, "\n")
+        #delay_response = adapter.addWithUUID(delay_response_servant)
+        #delayed_query = adapter.addWithUUID(delayed_query_servant)
+
+        discovery_proxy = IceDrive.DiscoveryPrx.checkedCast(discovery) # Creamos el proxy del servicio de descubrimiento
+
+        #delay_response_proxy = IceDrive.BlobQueryResponsePrx.checkedCast(delay_response) # Creamos el proxy del servicio de respuesta diferida
+        #delayed_query_proxy = IceDrive.BlobQueryPrx.checkedCast(delayed_query)
+        
         topic.subscribeAndGetPublisher({},discovery_proxy) # es el que recibe los anuncios de los otros servicios
 
+        #topic_delayed_response.subscribeAndGetPublisher({},delay_response_proxy) # es el que recibe las peticiones de los otros servicios
+        #topic_delayed_response.subscribeAndGetPublisher({},delayed_query_proxy) # es el que envia las peticiones de los otros servicios
+        
                     
         logging.info("Proxy: %s", servant_proxy)
         blob_prx = IceDrive.BlobServicePrx.checkedCast(servant_proxy)
@@ -91,6 +106,7 @@ class ClientApp(Ice.Application):
 
             # texto3.txt
             id_blob2 = str("ac1e9040b291a72aa1e818526432100391faea53ed6c33906002849d84f9fbac")
+            
 
             # texto4.txt
             id_blob3 = str("5ff53f6cdf06492c46686968ebbeb0294fb6ab2f8d214765306af229e8c79f14") 

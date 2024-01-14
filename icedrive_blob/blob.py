@@ -1,12 +1,13 @@
 """Module for servants implementations."""
 
+import time
 import hashlib
 import os
 import threading
 import Ice
 import IceDrive
 from .GarbageCollector import garbage_collector
-
+from .delayed_response import BlobQueryResponse
 
 class DataTransfer(IceDrive.DataTransfer):
     """Implementation of an IceDrive.DataTransfer interface."""
@@ -30,12 +31,13 @@ class DataTransfer(IceDrive.DataTransfer):
 
 class BlobService(IceDrive.BlobService):
     """Implementation of an IceDrive.BlobService interface."""
-    def __init__(self, query_publisher) -> None:
+    def __init__(self, query_discovery,delayed_pub) -> None:
         self.ruta_diccionario_id_nlinks = "icedrive_blob/Sistema_directorios/tmp/historial_blob.txt"
         self.ruta_diccionario_path_id = "icedrive_blob/Sistema_directorios/tmp/historial_rutas.txt"
         self.ruta_persistencia = "icedrive_blob/Sistema_directorios/bin"
         
-        self.query_pub = query_publisher
+        self.query_discovery = query_discovery
+        self.delayed_pub = delayed_pub
         self.expected_responses = {}
 
 
@@ -88,6 +90,27 @@ class BlobService(IceDrive.BlobService):
 
         return diccionario
 
+    def remove_object_if_exists(self, adapter: Ice.ObjectAdapter, identity: Ice.Identity) -> None:
+        """Remove an object from the adapter if exists."""
+        if adapter.find(identity) is not None:
+            adapter.remove(identity)
+            raise IceDrive.TemporaryUnavailable()
+
+        del self.expected_responses[identity]
+
+    def prepare_and_response_callback(self, current: Ice.Current) -> IceDrive.BlobQueryResponsePrx:
+        """Prepare an IceDrive.BlobQueryResponse object in order to send the query."""
+        future = Ice.Future()
+        response = BlobQueryResponse(future)
+        prx = current.adapter.addWithUUID(response)
+        query_response_prx = IceDrive.BlobQueryResponsePrx.uncheckedCast(prx)
+
+        identity = query_response_prx.ice_getIdentity()
+        self.expected_responses[identity] = future
+        threading.Timer(5.0, self.remove_object_if_exists, (current.adapter, identity)).start()
+        return query_response_prx
+
+  
     def link(self, blob_id: str, current: Ice.Current = None) -> None:
         """Mark a blob_id file as linked in some directory."""
         # necesitamos que el diccionario sea persistente entre ejecuciones
@@ -97,6 +120,7 @@ class BlobService(IceDrive.BlobService):
             # actualizamos el fichero de persistencia
             diccionario_id_nlinks[blob_id] = str(cont_links)
             self.update_persistence_file(diccionario_id_nlinks,self.ruta_diccionario_id_nlinks)
+            print("==========[LINK SUCCESS:",blob_id,"]==========\n")
         else:
             raise IceDrive.UnknownBlob(blob_id)
 
@@ -123,6 +147,7 @@ class BlobService(IceDrive.BlobService):
                     del diccionario_rutas[file]
                     del diccionario_id_nlinks[blob_id]
                     self.removes_entries_dictionary(diccionario_id_nlinks, diccionario_rutas)
+                    print("==========[UNLINK SUCCESS:",blob_id,"]==========\n")
                 except IceDrive.UnknownBlob:
                     print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
                     raise IceDrive.UnknownBlob(blob_id)
@@ -169,7 +194,9 @@ class BlobService(IceDrive.BlobService):
         """Register a DataTransfer object to upload a file to the service.
             Returns the blob_id of the uploaded file."""
         # lo primero: vamos a comprobar si el usuario esta activo
-        if user.verifyUser():
+        prx_auth = self.query_discovery.get_Authentication()
+
+        if prx_auth.verifyUser(user):
             # recuperamos los diccionarios de los archivos de persistencia
             diccionario_blobs = self.recover_dictionary(self.ruta_diccionario_id_nlinks)
             diccionario_paths = self.recover_dictionary(self.ruta_diccionario_path_id)
@@ -185,6 +212,7 @@ class BlobService(IceDrive.BlobService):
                         blob.close()
                         break
                 except IceDrive.FailedToReadData:
+                    print("[ERROR] No se ha podido leer el archivo\n")
                     raise IceDrive.FailedToReadData()
 
             # convertimos el contenido del fichero en hash
@@ -193,6 +221,7 @@ class BlobService(IceDrive.BlobService):
 
             # Comprobamos si el blobid ya existe en el diccionario
             if blobid not in diccionario_blobs:
+                print("==========[UPLOADING]: "+blobid+"==========\n")
                 self.update_dictionary(blobid)
                 file_name = blobid + ".txt"
                 # añadimos el contenido del archivo en blobid.txt - lo creamos en nuestra persistencia
@@ -213,30 +242,45 @@ class BlobService(IceDrive.BlobService):
                 hilo.start() # iniciamos el hilo que se encargara del recolector de basura
             else:
                 return blobid
+            
+            print("==========[UPLOAD SUCCESS]==========\n")
         else:
-            raise IceDrive.TemporaryUnavailable()
+            print("[ERROR] El usuario no esta autorizado \n")
+            raise IceDrive.Unauthorized()
+        
         return blobid
 
 
     def download(
         self, user: IceDrive.UserPrx, blob_id: str, current: Ice.Current = None
     ) -> IceDrive.DataTransferPrx:
+        
         """Return a DataTransfer objet to enable the client to download the given blob_id."""
-                # lo primero: vamos a comprobar si el usuario esta activo
-        if user.verifyUser():
+        prx_auth = self.query_discovery.get_Authentication()
+        
+        # lo primero: vamos a comprobar si el usuario esta activo
+        if prx_auth.verifyUser(user):
             try:
                 # encontremos el fichero en el directorio donde se almacenan los blobs
                 fichero = self.find_file(blob_id,self.ruta_persistencia)
-            except IceDrive.UnknownBlob: # basicamente el archivo no existe, no esta en el directorio
-                print("[ERROR] El archivo no existe con [ID=" + blob_id + "] no existe\n")
-                raise IceDrive.UnknownBlob(blob_id)
+                full_path = os.path.join(self.ruta_persistencia, fichero)
 
-            full_path = os.path.join(self.ruta_persistencia, fichero)
-
-            servant = DataTransfer(full_path)
-            prx = current.adapter.addWithUUID(servant)
-            data_transfer_prx = IceDrive.DataTransferPrx.uncheckedCast(prx)
+                servant = DataTransfer(full_path)
+                prx = current.adapter.addWithUUID(servant)
+                data_transfer_prx = IceDrive.DataTransferPrx.uncheckedCast(prx)
+                print("==========[DOWNLOAD SUCCESS]==========\n")
+            except IceDrive.UnknownBlob as e: # basicamente el archivo no existe, no esta en el directorio
+                # Respuesta diferida
+                query_response_prx = self.prepare_and_response_callback(current)
+                prx_blob = self.query_discovery.get_BlobService()
+                self.delayed_pub.downloadBlob(blob_id, query_response_prx) #publicamos la query
+                data_transfer_prx = prx_blob.download(user, blob_id)
+                print("==========[DELAYED DOWNLOAD SUCCESS]==========\n")
+                query_response_prx.downloadBlob(data_transfer_prx) 
+                return self.expected_responses[query_response_prx.ice_getIdentity()]           
         else:
-            raise IceDrive.TemporaryUnavailable()
+            print("[ERROR] El usuario no esta autorizado \n")
+            raise IceDrive.Unauthorized()
+            
 
         return data_transfer_prx
