@@ -13,7 +13,6 @@ class Discovery(IceDrive.Discovery):
         self.lista_authentications = []
         self.lista_directories = []
         self.lista_blobs = []
-        
 
     def announceAuthentication(self, prx: IceDrive.AuthenticationPrx, current: Ice.Current = None) -> None:
         """Receive an Authentication service announcement."""

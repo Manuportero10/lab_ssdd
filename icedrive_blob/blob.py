@@ -38,6 +38,7 @@ class BlobService(IceDrive.BlobService):
         
         self.query_discovery = query_discovery
         self.delayed_pub = delayed_pub
+        
         self.expected_responses = {}
 
 
@@ -89,27 +90,6 @@ class BlobService(IceDrive.BlobService):
                 diccionario[line[0]] = line[1]
 
         return diccionario
-
-    def remove_object_if_exists(self, adapter: Ice.ObjectAdapter, identity: Ice.Identity) -> None:
-        """Remove an object from the adapter if exists."""
-        if adapter.find(identity) is not None:
-            adapter.remove(identity)
-            raise IceDrive.TemporaryUnavailable()
-
-        del self.expected_responses[identity]
-
-    def prepare_and_response_callback(self, current: Ice.Current) -> IceDrive.BlobQueryResponsePrx:
-        """Prepare an IceDrive.BlobQueryResponse object in order to send the query."""
-        future = Ice.Future()
-        response = BlobQueryResponse(future)
-        prx = current.adapter.addWithUUID(response)
-        query_response_prx = IceDrive.BlobQueryResponsePrx.uncheckedCast(prx)
-
-        identity = query_response_prx.ice_getIdentity()
-        self.expected_responses[identity] = future
-        threading.Timer(5.0, self.remove_object_if_exists, (current.adapter, identity)).start()
-        return query_response_prx
-
   
     def link(self, blob_id: str, current: Ice.Current = None) -> None:
         """Mark a blob_id file as linked in some directory."""
@@ -235,7 +215,7 @@ class BlobService(IceDrive.BlobService):
 
                 # Lanzamos un hilo, a modo de temporizador del archivo
                 # para que se elimine si no se ha enlazado
-                timer_file = 10
+                timer_file = 20
                 hilo = threading.Thread(target=garbage_collector,
                                         args=(timer_file,blobid,self.ruta_diccionario_id_nlinks,self,))
                 hilo.daemon = True
@@ -269,18 +249,22 @@ class BlobService(IceDrive.BlobService):
                 prx = current.adapter.addWithUUID(servant)
                 data_transfer_prx = IceDrive.DataTransferPrx.uncheckedCast(prx)
                 print("==========[DOWNLOAD SUCCESS]==========\n")
+                return data_transfer_prx
             except IceDrive.UnknownBlob as e: # basicamente el archivo no existe, no esta en el directorio
                 # Respuesta diferida
-                query_response_prx = self.prepare_and_response_callback(current)
-                prx_blob = self.query_discovery.get_BlobService()
-                self.delayed_pub.downloadBlob(blob_id, query_response_prx) #publicamos la query
-                data_transfer_prx = prx_blob.download(user, blob_id)
-                print("==========[DELAYED DOWNLOAD SUCCESS]==========\n")
-                query_response_prx.downloadBlob(data_transfer_prx) 
-                return self.expected_responses[query_response_prx.ice_getIdentity()]           
+                future = Ice.Future()
+                response_servant = BlobQueryResponse(future)
+                response = current.adapter.addWithUUID(response_servant)
+                response_prx = IceDrive.BlobQueryResponsePrx.uncheckedCast(response)
+                self.delayed_pub.downloadBlob(blob_id, response_prx) #publicamos la query
+                blob_prox = self.query_discovery.get_BlobService()
+                data_prx = blob_prox.download(user, blob_id)
+                response_prx.downloadBlob(data_prx)
+                print("==========[DELAYED DOWNLOAD SUCCESS]==========\n") 
+                return future          
         else:
             print("[ERROR] El usuario no esta autorizado \n")
             raise IceDrive.Unauthorized()
             
 
-        return data_transfer_prx
+        
